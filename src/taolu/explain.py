@@ -47,17 +47,24 @@ def context(conn: sqlite3.Connection, all_cards: list[cards.Card], problem_id: i
         )
     ]
     linked = [by_id[i] for i in linked_ids if i in by_id]
+    # 正在做、且没到 L4 的另一道题不能出现在推荐里：它出现在哪张卡下面，就等于说出了它的套路
+    att = sessions.active(conn)
+    hidden = (
+        att["problem_id"]
+        if att is not None and att["max_hint_level"] < sessions.MAX_LEVEL
+        else -1
+    )
     next_candidates = []
     for c in linked:
         rows = conn.execute(
             """
             SELECT p.id, p.title, p.difficulty
             FROM problem_card pc JOIN problem p ON p.id = pc.problem_id
-            WHERE pc.card_id = ? AND p.id != ?
+            WHERE pc.card_id = ? AND p.id != ? AND p.id != ?
               AND NOT EXISTS (SELECT 1 FROM attempt a WHERE a.problem_id = p.id AND a.accepted = 1)
             ORDER BY pc.ord LIMIT ?
             """,
-            (c.id, p.id, NEXT_PER_CARD),
+            (c.id, p.id, hidden, NEXT_PER_CARD),
         ).fetchall()
         next_candidates.append(
             {

@@ -143,6 +143,17 @@ def test_explain_allowed_when_coaching_another_problem(capsys):
     assert ctx(capsys)[0] == 0
 
 
+def test_coached_problem_hidden_from_next_candidates_below_l4(capsys):
+    # 在做 496（与 739 同属单调栈卡）时 explain 739：496 若出现在单调栈下面，就剧透了它的套路
+    run(capsys, "session", "start", "496")
+    for level in range(4):
+        ids = [p["id"] for p in ctx(capsys)[1]["next_candidates"][0]["problems"]]
+        assert 496 not in ids and ids == [503, 84, 42], f"L{level}"
+        run(capsys, "session", "advance", "--skip")
+    # 到了 L4 已无可剧透，恢复正常推荐
+    assert [p["id"] for p in ctx(capsys)[1]["next_candidates"][0]["problems"]] == [496, 503, 84]
+
+
 def test_explain_unknown_problem(capsys):
     code, _, err = run(capsys, "explain", "context", "99999", "--json")
     assert code == 1 and "problem add" in err
