@@ -1,0 +1,9 @@
+{
+  "name": "taolu",
+  "version": "0.0.1",
+  "description": "LeetCode 刷题教练：分层提示、灵神解法拆解、套路卡与间隔复习",
+  "author": {
+    "name": "BeforeLanding"
+  },
+  "repository": "https://github.com/BeforeLanding/leetcode-coach"
+}

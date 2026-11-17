@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+# 本地数据库与题解缓存，绝不进仓库
+.taolu/
+solutions_cache/
