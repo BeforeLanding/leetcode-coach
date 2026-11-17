@@ -141,3 +141,25 @@ def extract_template(body: str) -> str | None:
                     return "\n".join(lines[i + 1 : j]) + "\n"
             return None  # 围栏没闭合，当作没有模板
     return None
+
+
+def link_problem(card: Card, problem_id: int) -> None:
+    """把题号追加到卡片 frontmatter 的 problems 列表末尾，只改那一行，其余逐字节不动。"""
+    if problem_id in card.problems:
+        raise ValueError(f"{problem_id} 号题已经关联到 {card.name}（{card.id}）")
+    lines = card.path.read_bytes().decode("utf-8").splitlines(keepends=True)
+    end = next(i for i in range(1, len(lines)) if lines[i].strip() == "---")
+    for i in range(1, end):
+        if lines[i].partition(":")[0].strip() == "problems":
+            content = lines[i].rstrip("\r\n")
+            eol = lines[i][len(content) :]
+            body = content.rstrip()
+            if not body.endswith("]"):
+                raise ValueError(f"{card.path}: problems 必须是单行 [题号, ...] 列表")
+            body = body[:-1]
+            sep = ", " if body.partition("[")[2].strip() else ""
+            lines[i] = f"{body}{sep}{problem_id}]{eol}"
+            break
+    else:
+        raise ValueError(f"{card.path}: 找不到 problems 行")
+    card.path.write_bytes("".join(lines).encode("utf-8"))

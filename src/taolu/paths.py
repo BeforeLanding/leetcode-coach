@@ -31,3 +31,21 @@ def home() -> Path:
 
 def db_path() -> Path:
     return home() / "taolu.db"
+
+
+def solutions_dir() -> Path:
+    """用户粘贴的题解缓存。版权边界：只能在 home() 下，绝不进仓库。"""
+    return _private("solutions")
+
+
+def notes_dir() -> Path:
+    """生成的拆解笔记，同样只在本地。"""
+    return _private("notes")
+
+
+def _private(name: str) -> Path:
+    d = home().resolve()
+    root = content_root().resolve()
+    if d == root or root in d.parents:
+        raise RuntimeError(f"TAOLU_HOME（{d}）不能在仓库目录内：题解和笔记不能进仓库")
+    return d / name

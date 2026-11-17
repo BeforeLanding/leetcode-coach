@@ -10,8 +10,9 @@ import argparse
 import json
 import sqlite3
 import sys
+from pathlib import Path
 
-from taolu import __version__, cards, db, paths, problems, sessions
+from taolu import __version__, cards, db, explain, paths, problems, sessions, solutions
 
 
 def _open() -> tuple[sqlite3.Connection, list[cards.Card]]:
@@ -136,6 +137,92 @@ def cmd_session_abandon(_: argparse.Namespace) -> int:
     return 0
 
 
+def _read_input(file: str | None) -> str:
+    if file:
+        try:
+            return Path(file).read_text(encoding="utf-8-sig")
+        except OSError as e:
+            raise ValueError(f"读不了 {file}：{e}") from e
+    return sys.stdin.read()
+
+
+def _known_problem(conn: sqlite3.Connection, problem_id: int) -> problems.Problem:
+    p = problems.get(conn, problem_id)
+    if p is None:
+        raise LookupError(
+            f"题库里没有 {problem_id} 号题。可用 `taolu problem add {problem_id} <slug> <标题> <Easy|Medium|Hard>` 添加"
+        )
+    return p
+
+
+def cmd_card_link(args: argparse.Namespace) -> int:
+    conn, all_cards = _open()
+    _known_problem(conn, args.id)
+    card = next((c for c in all_cards if c.id == args.card), None)
+    if card is None:
+        raise LookupError(f"找不到卡片 id {args.card!r}（用 `taolu card list` 查看）")
+    cards.link_problem(card, args.id)
+    print(f"已把 {args.id} 号题关联到 {card.name}（{card.id}）：{card.path}")
+    return 0
+
+
+def cmd_solution_save(args: argparse.Namespace) -> int:
+    conn, _ = _open()
+    _known_problem(conn, args.id)
+    n = solutions.save(args.id, _read_input(args.file), source=args.source, lang=args.lang)
+    print(f"已保存 {args.id} 号题第 {n} 份题解（仅本地：{paths.solutions_dir() / str(args.id)}）")
+    return 0
+
+
+def cmd_solution_list(args: argparse.Namespace) -> int:
+    conn, _ = _open()
+    ids = [args.id] if args.id is not None else solutions.problems_with_solutions()
+    if not ids:
+        print("还没有缓存任何题解")
+        return 0
+    for pid in ids:
+        items = solutions.list_for(pid)
+        if not items:
+            print(f"{pid} 号题还没有缓存题解")
+        for s in items:
+            print(f"{pid} #{s.n} · {s.lang} · {s.source or '（无来源）'} · {s.saved_at}")
+    return 0
+
+
+def cmd_solution_show(args: argparse.Namespace) -> int:
+    conn, _ = _open()
+    _known_problem(conn, args.id)
+    explain.require_spoiler_ok(conn, args.id)
+    print(solutions.get(args.id, args.n).text, end="")
+    return 0
+
+
+def cmd_explain_context(args: argparse.Namespace) -> int:
+    conn, all_cards = _open()
+    ctx = explain.context(conn, all_cards, args.id)
+    if args.json:
+        print(json.dumps(ctx, ensure_ascii=False, indent=2))
+        return 0
+    p = ctx["problem"]
+    print(f"{p['id']}. {p['title']}（{p['difficulty']}）{p['url']}")
+    print(f"题解 {len(ctx['solutions'])} 份；关联卡：" + ("、".join(c["name"] for c in ctx["cards"]) or "无"))
+    print(f"拆解笔记：{'已有' if ctx['existing_note'] else '无'}（完整内容请用 --json）")
+    return 0
+
+
+def cmd_explain_save(args: argparse.Namespace) -> int:
+    conn, _ = _open()
+    path = explain.save_note(conn, args.id, _read_input(args.file))
+    print(f"已保存拆解笔记（仅本地）：{path}")
+    return 0
+
+
+def cmd_explain_show(args: argparse.Namespace) -> int:
+    conn, _ = _open()
+    print(explain.show_note(conn, args.id), end="")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="taolu", description="LeetCode 刷题教练")
     parser.add_argument("--version", action="version", version=f"taolu {__version__}")
@@ -182,14 +269,54 @@ def build_parser() -> argparse.ArgumentParser:
     res.add_argument("--no-ac", dest="ac", action="store_false", default=None)
     send.set_defaults(func=cmd_session_end)
     sess.add_parser("abandon", help="放弃：结束但不计 AC").set_defaults(func=cmd_session_abandon)
+
+    clink = card.add_parser("link", help="把一道题追加到套路卡的 problems 列表（只改那一行）")
+    clink.add_argument("id", type=int, help="题号")
+    clink.add_argument("card", help="卡片 id")
+    clink.set_defaults(func=cmd_card_link)
+
+    sol = sub.add_parser("solution", help="本地题解缓存（只存 ~/.taolu，不进仓库）").add_subparsers(
+        dest="solution_cmd", required=True
+    )
+    ssave = sol.add_parser("save", help="保存一份题解正文（--file 或 stdin）")
+    ssave.add_argument("id", type=int)
+    ssave.add_argument("--source", default="", help="来源链接，仅作记录，不会被抓取")
+    ssave.add_argument("--lang", default="other", choices=solutions.LANGS)
+    ssave.add_argument("--file", help="从文件读取；不给则读 stdin")
+    ssave.set_defaults(func=cmd_solution_save)
+    slist = sol.add_parser("list", help="列出已缓存的题解（不打印正文）")
+    slist.add_argument("id", type=int, nargs="?")
+    slist.set_defaults(func=cmd_solution_list)
+    sshow = sol.add_parser("show", help="打印题解正文，默认最新一份（会剧透）")
+    sshow.add_argument("id", type=int)
+    sshow.add_argument("--n", type=int)
+    sshow.set_defaults(func=cmd_solution_show)
+
+    exp = sub.add_parser("explain", help="解法拆解（会剧透）").add_subparsers(
+        dest="explain_cmd", required=True
+    )
+    ectx = exp.add_parser("context", help="讲解所需的全部材料")
+    ectx.add_argument("id", type=int)
+    ectx.add_argument("--json", action="store_true")
+    ectx.set_defaults(func=cmd_explain_context)
+    esave = exp.add_parser("save", help="保存拆解笔记（--file 或 stdin），覆盖前留 .bak")
+    esave.add_argument("id", type=int)
+    esave.add_argument("--file")
+    esave.set_defaults(func=cmd_explain_save)
+    eshow = exp.add_parser("show", help="打印拆解笔记")
+    eshow.add_argument("id", type=int)
+    eshow.set_defaults(func=cmd_explain_show)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    # Windows 控制台默认编码可能不是 UTF-8，统一输出编码，避免中文乱码/报错
+    # Windows 控制台默认编码可能不是 UTF-8，统一输出编码，避免中文乱码/报错；
+    # stdin 用 utf-8-sig，兼容 PowerShell 管道可能带的 BOM
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
+    if hasattr(sys.stdin, "reconfigure"):
+        sys.stdin.reconfigure(encoding="utf-8-sig")
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
