@@ -8,6 +8,11 @@
 - 2026-11-17：形态定为 **Claude Code 插件 + 本地 Python 核心**；Web 应用推迟到 v1 之后。
 - 2026-11-17（默认假设，可改）：名字用 `taolu`；仓库先按“可公开”的标准组织（题解正文不进仓库）；灵神解法由我手动粘贴或给链接，仅本地缓存。
 - Python 核心零第三方运行时依赖（argparse + sqlite3 + 标准库），开发依赖只有 pytest，用 uv 管理。
+- 2026-11-17（M1）：提示梯状态机落在 CLI + SQLite。`attempt.max_hint_level` 即当前层；新增 `attempt_step(attempt_id, level, note, skipped, at)` 记录每层的想法/跳过（schema v2，`db.MIGRATIONS` 逐级迁移，每级一个事务）。
+- 2026-11-17（M1）：“同一时间最多一个进行中的 attempt”除了 CLI 检查，还用 `UNIQUE INDEX ON attempt((1)) WHERE ended_at IS NULL` 在库层兜底。
+- 2026-11-17（M1）：门禁只在 `sessions.state` 里算：L<2 `reveal.cards = null`，L<3 `reveal.template = null`；文本与 JSON 输出共用同一份数据，均有测试。题目自己的标题/URL 是公开元数据，可能含套路词（如 704 二分查找），不算泄露。题挂多张卡时，模板取排在最前的一张。
+- 2026-11-17（M1）：`advance` 在 L4 再调用报错而不是静默吞掉；`note` 与 `skip` 二选一，空 note 拒绝。放弃 = `ended_at` 有值且 `accepted IS NULL`。
+- 2026-11-17（M1）：插件调用 CLI 统一用 `uv run --quiet --project "${CLAUDE_PLUGIN_ROOT}" taolu ...`。官方文档：该变量在 command/skill 的 Markdown 正文里被**内联替换**，但**不会**导出到 Bash 工具的环境变量，所以命令必须写在正文里（不能写成 `$CLAUDE_PLUGIN_ROOT` 让 shell 去取）。Windows 上替换结果多为正斜杠路径。实机验证见汇报。
 
 ---
 
@@ -124,7 +129,7 @@ Claude Code
 | 里程碑 | 内容 | 验收 |
 |---|---|---|
 | M0 骨架（2–3 天） | Python 包 + SQLite + 题目元数据导入 + 5 张套路卡 | `taolu card show 滑动窗口` 可用 |
-| M1 coach（3–4 天） | 提示梯状态机 + 插件 coach 命令 | 用 10 道题自测：未到 L2 前从未出现套路名或代码 |
+| M1 coach（3–4 天，已实现，真实会话下的 10 题自测待做） | 提示梯状态机 + 插件 coach 命令 | 用 10 道题自测：未到 L2 前从未出现套路名或代码 |
 | M2 explain（2–3 天） | F2 固定结构输出 + 套路卡关联 | 10 道灵神题解拆解，结构完整、Python 版能 AC |
 | M3 review/next（3 天） | FSRS + 推荐 | 连用一周，每天 review 能出到期卡 |
 | M4 打磨 | 卡片补到 ~25 张、README、演示 | 自己每天在用 |

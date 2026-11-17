@@ -6,7 +6,7 @@ LeetCode 刷题教练：把每道题落到一个“套路”上，用分层提�
 形态是 **Claude Code 插件 + 本地 Python 核心**：插件提供 slash command，
 状态（做到第几层提示、复习排期）由本地 CLI 和 SQLite 持有。
 
-> 状态：M0（骨架）。目前可用的是套路卡和题目元数据，coach / explain / review 还在路上。
+> 状态：M1（分层提示 coach）。可用：套路卡、题目元数据、`/taolu:coach` 提示梯；explain / review 还在路上。
 > 完整方案见 [docs/00-plan.md](docs/00-plan.md)。
 
 ## 安装与使用
@@ -27,7 +27,38 @@ uv run taolu problem show 739     # 默认不显示所属套路，加 --reveal �
 claude --plugin-dir /path/to/leetcode-coach
 ```
 
-然后在会话里用 `/taolu:card 单调栈`。
+然后在会话里：
+
+- `/taolu:card 单调栈`：查看套路卡
+- `/taolu:coach 739`：开始（或接着）做 739 题，按 L0–L4 分层提示辅导
+
+### 分层提示（coach）
+
+进度存在 SQLite 里，模型每一轮先问 CLI“现在允许讲到哪一层”，不靠自己记。
+**门禁在 CLI 里**：L2 之前输出里不会出现套路名、卡片 id，L3 之前不会出现模板。
+
+| 层 | 内容 |
+|---|---|
+| L0 | 复述题意，从数据范围反推目标复杂度 |
+| L1 | 引导性问题，不说套路名 |
+| L2 | 套路名 + 一句关键观察 |
+| L3 | 模板骨架，关键 1–3 行留空 |
+| L4 | 完整思路与 Python 解法 |
+
+进入下一层前要先写一句自己的想法（`--note`）；坚持跳过用 `--skip`，会记为“看了提示”。
+
+直接用命令行也可以（`uv run taolu ...`）：
+
+```bash
+taolu problem add 1004 max-consecutive-ones-iii "最大连续1的个数 III" Medium   # 追加题目元数据
+taolu session start 739                  # 开始，L0；同一时间只能有一个进行中的练习
+taolu session state [--json]             # 当前层级与允许透露的内容
+taolu session advance --note "想法"      # 或 --skip；进入下一层，最高 L4
+taolu session end --ac                   # 或 --no-ac；打印小结（层数、跳过数、耗时）
+taolu session abandon                    # 放弃，不计 AC
+```
+
+`taolu session state` 只用于读状态；`taolu card show`、`taolu problem show --reveal` 会剧透，做题时别用。
 
 ## 目录
 
