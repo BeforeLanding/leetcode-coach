@@ -65,3 +65,26 @@ def get(conn: sqlite3.Connection, problem_id: int) -> Problem | None:
         "SELECT id, slug, title, difficulty, rating FROM problem WHERE id = ?", (problem_id,)
     ).fetchone()
     return Problem(**dict(row)) if row else None
+
+
+DIFFICULTIES = ("Easy", "Medium", "Hard")
+
+
+def append_csv(path: Path, problem: Problem) -> None:
+    """往 problems.csv 追加一行元数据；题号或 slug 已存在则报错。"""
+    if problem.difficulty not in DIFFICULTIES:
+        raise ValueError(f"难度必须是 {'/'.join(DIFFICULTIES)}，收到 {problem.difficulty!r}")
+    if problem.id <= 0 or not problem.slug.strip() or not problem.title.strip():
+        raise ValueError("题号必须为正整数，slug 和标题不能为空")
+    for existing in load_csv(path):
+        if existing.id == problem.id:
+            raise ValueError(f"{problem.id} 号题已存在：{existing.title}")
+        if existing.slug == problem.slug:
+            raise ValueError(f"slug {problem.slug!r} 已被 {existing.id} 号题使用")
+    needs_newline = path.stat().st_size > 0 and not path.read_bytes().endswith(b"\n")
+    with path.open("a", encoding="utf-8", newline="") as f:
+        if needs_newline:
+            f.write("\n")
+        csv.writer(f, lineterminator="\n").writerow(
+            [problem.id, problem.slug, problem.title, problem.difficulty, ""]
+        )

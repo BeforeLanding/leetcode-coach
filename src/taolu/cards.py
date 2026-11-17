@@ -129,3 +129,15 @@ def resolve(cards: list[Card], query: str) -> Card:
         raise LookupError(f"找不到套路卡：{q!r}（用 `taolu card list` 查看全部）")
     names = "、".join(f"{c.name}({c.id})" for c in hits)
     raise LookupError(f"{q!r} 匹配到多张卡：{names}，请写得更具体")
+
+
+def extract_template(body: str) -> str | None:
+    """取卡片正文里第一个 ```python 代码块的内容（不含围栏）；没有则返回 None。"""
+    lines = body.splitlines()
+    for i, line in enumerate(lines):
+        if line.strip().lower() == "```python":
+            for j in range(i + 1, len(lines)):
+                if lines[j].strip().startswith("```"):
+                    return "\n".join(lines[i + 1 : j]) + "\n"
+            return None  # 围栏没闭合，当作没有模板
+    return None

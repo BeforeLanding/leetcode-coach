@@ -7,10 +7,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sqlite3
 import sys
 
-from taolu import __version__, cards, db, paths, problems
+from taolu import __version__, cards, db, paths, problems, sessions
 
 
 def _open() -> tuple[sqlite3.Connection, list[cards.Card]]:
@@ -79,6 +80,62 @@ def cmd_problem_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_problem_add(args: argparse.Namespace) -> int:
+    problems.append_csv(
+        paths.problems_csv(),
+        problems.Problem(id=args.id, slug=args.slug, title=args.title, difficulty=args.difficulty),
+    )
+    print(f"已添加 {args.id}. {args.title}（{args.difficulty}）到 {paths.problems_csv()}")
+    return 0
+
+
+def cmd_session_start(args: argparse.Namespace) -> int:
+    conn, _ = _open()
+    p = sessions.start(conn, args.id)
+    print(f"已开始：{p.id}. {p.title}（{p.difficulty}），当前 L0")
+    return 0
+
+
+def cmd_session_state(args: argparse.Namespace) -> int:
+    conn, all_cards = _open()
+    st = sessions.state(conn, all_cards)
+    if args.json:
+        print(json.dumps(st, ensure_ascii=False, indent=2))
+        return 0
+    p = st["problem"]
+    print(f"{p['id']}. {p['title']}（{p['difficulty']}）{p['url']}")
+    print(f"当前层级：L{st['level']}（最高 L{st['max_level']}）")
+    for n in st["notes"]:
+        print(f"- L{n['level']}：{'（跳过）' if n['skipped'] else n['note']}")
+    reveal = st["reveal"]
+    if reveal["cards"] is not None:
+        names = "、".join(f"{c['name']}（{c['id']}）" for c in reveal["cards"]) or "（无关联套路卡）"
+        print(f"套路卡：{names}")
+    if reveal["template"] is not None:
+        print("模板：")
+        print(reveal["template"], end="")
+    return 0
+
+
+def cmd_session_advance(args: argparse.Namespace) -> int:
+    conn, _ = _open()
+    level = sessions.advance(conn, args.note, args.skip)
+    print(f"已进入 L{level}")
+    return 0
+
+
+def cmd_session_end(args: argparse.Namespace) -> int:
+    conn, _ = _open()
+    print(sessions.finish(conn, args.ac))
+    return 0
+
+
+def cmd_session_abandon(_: argparse.Namespace) -> int:
+    conn, _cards = _open()
+    print(sessions.finish(conn, None))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="taolu", description="LeetCode 刷题教练")
     parser.add_argument("--version", action="version", version=f"taolu {__version__}")
@@ -97,6 +154,34 @@ def build_parser() -> argparse.ArgumentParser:
     pshow.add_argument("id", type=int)
     pshow.add_argument("--reveal", action="store_true", help="同时显示所属套路卡（会剧透）")
     pshow.set_defaults(func=cmd_problem_show)
+
+    padd = prob.add_parser("add", help="往 data/problems.csv 追加一道题的元数据")
+    padd.add_argument("id", type=int)
+    padd.add_argument("slug")
+    padd.add_argument("title")
+    padd.add_argument("difficulty", choices=problems.DIFFICULTIES)
+    padd.set_defaults(func=cmd_problem_add)
+
+    sess = sub.add_parser("session", help="做题会话（提示梯）").add_subparsers(
+        dest="session_cmd", required=True
+    )
+    sstart = sess.add_parser("start", help="开始做一道题，level=0")
+    sstart.add_argument("id", type=int)
+    sstart.set_defaults(func=cmd_session_start)
+    sstate = sess.add_parser("state", help="当前会话状态（只含当前层允许透露的信息）")
+    sstate.add_argument("--json", action="store_true")
+    sstate.set_defaults(func=cmd_session_state)
+    sadv = sess.add_parser("advance", help="记录当前层的想法或跳过，然后进入下一层")
+    grp = sadv.add_mutually_exclusive_group(required=True)
+    grp.add_argument("--note", help="用户写的想法或代码")
+    grp.add_argument("--skip", action="store_true", help="用户坚持跳过，记为看了提示")
+    sadv.set_defaults(func=cmd_session_advance)
+    send = sess.add_parser("end", help="结束会话并打印小结")
+    res = send.add_mutually_exclusive_group(required=True)
+    res.add_argument("--ac", dest="ac", action="store_true", default=None)
+    res.add_argument("--no-ac", dest="ac", action="store_false", default=None)
+    send.set_defaults(func=cmd_session_end)
+    sess.add_parser("abandon", help="放弃：结束但不计 AC").set_defaults(func=cmd_session_abandon)
     return parser
 
 
