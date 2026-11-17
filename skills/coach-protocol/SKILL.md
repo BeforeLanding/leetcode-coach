@@ -29,6 +29,7 @@ uv run --quiet --project "${CLAUDE_PLUGIN_ROOT}" taolu <子命令>
 1. **每次回复前**先运行 `taolu session state --json`。哪怕上一轮刚运行过，也要重新运行。
 2. **只能用 `reveal` 里给出的信息讲。** `reveal.cards` 为 `null` 说明还不能提任何套路名；`reveal.template` 为 `null` 说明还不能给模板。不要从自己的知识里补。
 3. **不要绕过门禁**：不要运行 `taolu card show`、`taolu card list`、`taolu problem show --reveal`，不要用 Read/Grep 去读本插件目录里的 `cards/*.md`。它们会泄露当前层级之后的内容。
+   同样禁止：`taolu explain context`、`taolu explain show`、`taolu solution show`，以及读取 `~/.taolu/solutions/`、`~/.taolu/notes/` 下的任何文件——那里是完整题解和拆解。
 4. 题面不在仓库里：题意由用户描述或贴出，或让用户打开 `problem.url`。不要凭记忆编造题面；对不上就问用户。
 5. 命令报错就把错误原文告诉用户，不要自己编状态。
 

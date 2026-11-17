@@ -13,6 +13,11 @@
 - 2026-11-17（M1）：门禁只在 `sessions.state` 里算：L<2 `reveal.cards = null`，L<3 `reveal.template = null`；文本与 JSON 输出共用同一份数据，均有测试。题目自己的标题/URL 是公开元数据，可能含套路词（如 704 二分查找），不算泄露。题挂多张卡时，模板取排在最前的一张。
 - 2026-11-17（M1）：`advance` 在 L4 再调用报错而不是静默吞掉；`note` 与 `skip` 二选一，空 note 拒绝。放弃 = `ended_at` 有值且 `accepted IS NULL`。
 - 2026-11-17（M1）：插件调用 CLI 统一用 `uv run --quiet --project "${CLAUDE_PLUGIN_ROOT}" taolu ...`。官方文档：该变量在 command/skill 的 Markdown 正文里被**内联替换**，但**不会**导出到 Bash 工具的环境变量，所以命令必须写在正文里（不能写成 `$CLAUDE_PLUGIN_ROOT` 让 shell 去取）。Windows 上替换结果多为正斜杠路径。实机验证见汇报。
+- 2026-11-17（M2）：版权边界落在代码里：题解缓存 `~/.taolu/solutions/<题号>/solution-<n>.md`、拆解笔记 `~/.taolu/notes/<题号>.md`（覆盖前留 `.bak`）都是纯文件，不进数据库；`paths._private` 拒绝 `TAOLU_HOME` 落在仓库目录内；测试断言保存后内容目录零写入，测试里只用自编的假代码。不抓取 leetcode.cn，只接受用户粘贴的正文，链接仅作 `--source` 记录。
+- 2026-11-17（M2）：explain 的门禁与 coach 同一原则：这道题有进行中的 attempt 且 L<4 时，`explain context/show` 和 `solution show` 拒绝（比任务书多门禁了 show 两个读取口，否则能绕过）；做别的题、或已 end/abandon 不受影响。`solution save/list`、`explain save` 不剧透，不设门禁。
+- 2026-11-17（M2）：`next_candidates` 按卡片顺序，排除当前题和 `accepted=1` 的题，每卡最多 3 道；`accepted=0/NULL`（未 AC、放弃）不算 AC。
+- 2026-11-17（M2）：`card link` 只改 `problems:` 那一行并保留原换行符，其余逐字节不变；模型只能“问用户要不要 link”，不自己执行。
+- 2026-11-17（M2）：stdin 统一按 `utf-8-sig` 读取（Windows 控制台默认 GBK；兼容 PowerShell 管道的 BOM）。
 
 ---
 
@@ -130,7 +135,7 @@ Claude Code
 |---|---|---|
 | M0 骨架（2–3 天） | Python 包 + SQLite + 题目元数据导入 + 5 张套路卡 | `taolu card show 滑动窗口` 可用 |
 | M1 coach（3–4 天，已实现，真实会话下的 10 题自测待做） | 提示梯状态机 + 插件 coach 命令 | 用 10 道题自测：未到 L2 前从未出现套路名或代码 |
-| M2 explain（2–3 天） | F2 固定结构输出 + 套路卡关联 | 10 道灵神题解拆解，结构完整、Python 版能 AC |
+| M2 explain（2–3 天，已实现，10 题人工验收待做） | F2 固定结构输出 + 套路卡关联 | 10 道灵神题解拆解，结构完整、Python 版能 AC |
 | M3 review/next（3 天） | FSRS + 推荐 | 连用一周，每天 review 能出到期卡 |
 | M4 打磨 | 卡片补到 ~25 张、README、演示 | 自己每天在用 |
 

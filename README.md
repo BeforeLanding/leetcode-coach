@@ -6,7 +6,7 @@ LeetCode 刷题教练：把每道题落到一个“套路”上，用分层提�
 形态是 **Claude Code 插件 + 本地 Python 核心**：插件提供 slash command，
 状态（做到第几层提示、复习排期）由本地 CLI 和 SQLite 持有。
 
-> 状态：M1（分层提示 coach）。可用：套路卡、题目元数据、`/taolu:coach` 提示梯；explain / review 还在路上。
+> 状态：M2（解法拆解 explain）。可用：套路卡、题目元数据、`/taolu:coach` 提示梯、`/taolu:explain` 解法拆解；review 还在路上。
 > 完整方案见 [docs/00-plan.md](docs/00-plan.md)。
 
 ## 安装与使用
@@ -31,6 +31,7 @@ claude --plugin-dir /path/to/leetcode-coach
 
 - `/taolu:card 单调栈`：查看套路卡
 - `/taolu:coach 739`：开始（或接着）做 739 题，按 L0–L4 分层提示辅导
+- `/taolu:explain 739`：拆解灵神的解法（要求先做完或放弃这道题，或推进到 L4）
 
 ### 分层提示（coach）
 
@@ -59,6 +60,26 @@ taolu session abandon                    # 放弃，不计 AC
 ```
 
 `taolu session state` 只用于读状态；`taolu card show`、`taolu problem show --reveal` 会剧透，做题时别用。
+
+### 解法拆解（explain）与本地缓存
+
+`/taolu:explain <题号>`：你把灵神的解法**贴进来**（只给链接的话，链接只作为来源记录，不会被抓取），
+Claude 按固定 7 段输出：套路归属、关键观察、怎么想到、与模板的差异、易错点、Python 版、同套路下一题。
+
+**题解和笔记只存本地**：`~/.taolu/solutions/<题号>/solution-<n>.md` 和 `~/.taolu/notes/<题号>.md`
+（`TAOLU_HOME` 可改位置，但不允许指到仓库目录里）。它们不进仓库、不进数据库。
+
+门禁：正在做某题且没到 L4 时，这道题的 `explain context / explain show / solution show` 一律拒绝（会剧透）；做别的题不受影响。
+
+```bash
+taolu solution save 739 --lang go --source URL [--file PATH]   # 不给 --file 读 stdin
+taolu solution list [739]                  # 不打印正文
+taolu solution show 739 [--n 1]
+taolu explain context 739 --json           # 题目、题解、关联卡与模板、同套路下一题、旧笔记
+taolu explain save 739 [--file PATH]       # 覆盖前保留 .bak
+taolu explain show 739
+taolu card link 739 monotonic-stack        # 只改卡片 frontmatter 的 problems 行
+```
 
 ## 目录
 
